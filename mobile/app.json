@@ -3,8 +3,7 @@
     "name": "Highway Planner",
     "slug": "highway-planner",
     "android": {
-      "package": "com.example.highwayplanner",
-      "config": { "googleMaps": { "apiKey": "REPLACE_WITH_RESTRICTED_ANDROID_MAPS_KEY" } }
+      "package": "com.example.highwayplanner"
     }
   }
 }

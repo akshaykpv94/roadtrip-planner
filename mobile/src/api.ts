@@ -10,7 +10,8 @@ export class ApiError extends Error {
 }
 
 async function call<T>(path: string, body?: unknown, opts: { method?: string; auth?: boolean } = {}): Promise<T> {
-  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 60_000); // generation makes several Google calls
+  // Generating a trip makes several spaced-out requests to public OpenStreetMap services, so allow up to two minutes.
+  const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 120_000);
   try {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (opts.auth) {
@@ -65,7 +66,8 @@ export interface RefreshResult {
 export const refreshTrip = (t: Trip) => call<RefreshResult>('/api/trips/refresh', {
   ...t.req, originalDurationMin: t.drivingMin, departure: new Date().toISOString() });
 
-export const health = () => call<{ ok: boolean; provider: 'google' | 'mock'; live: boolean }>('/api/health');
+export interface Health { ok: boolean; provider: 'osm' | 'mock' | 'google'; live: boolean; liveTraffic: boolean; tollPrices?: boolean; attribution?: string; notice?: string }
+export const health = () => call<Health>('/api/health');
 
 export const listSaved = () => call<SavedSummary[]>('/api/saved', undefined, { auth: true });
 export const loadSaved = (id: string) => call<Trip>(`/api/saved/${id}`, undefined, { auth: true });

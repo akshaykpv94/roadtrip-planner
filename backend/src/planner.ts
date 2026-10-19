@@ -2,7 +2,7 @@ import { cumulativeKm, decode, encode, pointAtKm, sliceKm } from './lib/polyline
 import { fuelStopTargets, usableRangeKm } from './lib/fuel.ts';
 import { calcBudget } from './lib/budget.ts';
 import { rank } from './lib/ranking.ts';
-import type { Candidate, Kind, MapsProvider } from './providers/types.ts';
+import { tripSourceOf, type Candidate, type Kind, type MapsProvider } from './providers/types.ts';
 
 export interface TripRequest {
   from: string; to: string; departure: Date; days: number; travellers: number;
@@ -15,7 +15,7 @@ export interface TripRequest {
 }
 export interface PlannedStop {
   id: string; kind: Kind; name: string; address?: string; lat: number; lng: number;
-  detourKm?: number; detourMin?: number; rating?: number; reviews?: number; phone?: string; mapsUri?: string;
+  detourKm?: number; detourMin?: number; rating?: number; reviews?: number; phone?: string; mapsUri?: string; hours?: string;
   eta: string; stayMin: number; status: 'planned'; alternatives: Candidate[];
 }
 const STAY: Record<Kind, number> = { food: 40, fuel: 10, hotel: 0, sight: 45, rest: 15 };
@@ -36,12 +36,15 @@ interface Want { kind: Kind; km: number; maxDetour: number }
 export async function planTrip(req: TripRequest, provider: MapsProvider) {
   const [main, ...alts] = await provider.route({ origin: req.from, destination: req.to, departure: req.departure, avoidTolls: req.avoidTolls, alternatives: true });
   const pts = decode(main.polyline), cum = cumulativeKm(pts), polyKm = cum.at(-1)!;
-  const kmScale = main.distanceKm / polyKm;            // polyline length -> Google distance
+  const kmScale = main.distanceKm / polyKm;            // polyline length -> routed road distance
   const totalKm = main.distanceKm, secPerKm = main.durationSec / totalKm;
   const { days, needed, requestedTooShort } = daysNeeded(main.durationSec, req.maxDrivingHours, req.days);
   const warnings: string[] = [];
-  if (provider.source === 'mock') warnings.push('MOCK DATA: no Google credentials in use. Do not rely on this itinerary.');
+  if (provider.source === 'mock') warnings.push('MOCK DATA: sample route and places, not real. Do not rely on this itinerary.');
+  if (provider.source === 'osm') warnings.push('Routes and places use OpenStreetMap data. Verified toll prices, ratings and opening hours may not be available.');
   if (!main.trafficAware) warnings.push('Traffic-aware timing is unavailable; durations are free-flow estimates.');
+  if (main.tollInr == null && provider.source !== 'mock') warnings.push('Toll prices are unknown for this route and are not included in the budget.');
+  for (const n of main.notes ?? []) if (!warnings.includes(n)) warnings.push(n);
   if (requestedTooShort) warnings.push(`This route needs at least ${needed} days at ${req.maxDrivingHours} driving hours a day; the plan uses ${days}.`);
 
   // Fuel/charge stop positions over the whole trip (km from start).
@@ -88,7 +91,7 @@ export async function planTrip(req: TripRequest, provider: MapsProvider) {
       if (!ranked.length) { warnings.push(`No suitable ${w.kind} stop found near km ${Math.round(w.km)}.`); continue; }
       const [best, ...rest] = ranked, stay = STAY[w.kind], detour = best.detourMin ?? 0;
       stops.push({ id: best.id, kind: w.kind, name: best.name, address: best.address, lat: best.lat, lng: best.lng, detourKm: best.detourKm,
-        detourMin: best.detourMin, rating: best.rating, reviews: best.reviews, phone: best.phone, mapsUri: best.mapsUri,
+        detourMin: best.detourMin, rating: best.rating, reviews: best.reviews, phone: best.phone, mapsUri: best.mapsUri, hours: best.openingHours,
         eta: fmt(new Date(arrive.getTime() + (detour / 2) * 60_000)), stayMin: stay, status: 'planned', alternatives: rest.slice(0, 2) });
       t = new Date(arrive.getTime() + (stay + detour) * 60_000); pos = w.km;
     }
@@ -107,7 +110,7 @@ export async function planTrip(req: TripRequest, provider: MapsProvider) {
     nights: days - 1, hotelPerNight: req.hotelPerNight, days, travellers: req.travellers, foodPerPersonDay: req.foodPerPersonDay, tollInr: main.tollInr });
   const step = Math.max(1, Math.floor(pts.length / 300));
   return {
-    id: `trip-${Date.now()}`, title: `${req.from} to ${req.to}`, source: provider.source === 'google' ? 'live' : 'mock',
+    id: `trip-${Date.now()}`, title: `${req.from} to ${req.to}`, source: tripSourceOf(provider.source),
     refreshedAt: new Date().toISOString(), trafficAware: main.trafficAware,
     totalKm: Math.round(totalKm), drivingMin: Math.round(main.durationSec / 60), days: outDays, budget, warnings,
     polyline: pts.filter((_, i) => i % step === 0 || i === pts.length - 1),
@@ -123,6 +126,6 @@ export async function refreshEta(args: { from: string; to: string; originalDurat
     .filter(a => curMin - a.durationMin >= 10);
   return { refreshedAt: new Date().toISOString(), trafficAware: cur.trafficAware, durationMin: curMin, deltaMin: delta,
     significantDelay: delta >= Math.max(15, args.originalDurationMin * 0.1), betterAlternatives: better,
-    note: cur.trafficAware ? 'Predicted from traffic data; this is not a report of closures or incidents.' : 'Traffic data unavailable for this refresh.' };
+    note: cur.trafficAware ? 'Predicted from traffic data; this is not a report of closures or incidents.' : 'Live traffic is not available from this data source, so this check cannot detect delays.' };
 }
 void pointAtKm;

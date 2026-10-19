@@ -3,24 +3,20 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { planTrip, refreshEta, type TripRequest } from './planner.ts';
 import { refreshSchema, tripSchema } from './schemas.ts';
-import { GoogleProvider } from './providers/google.ts';
-import { MockProvider } from './providers/mock.ts';
+import { createProvider, healthInfo } from './providers/select.ts';
 import { ProviderError, type MapsProvider } from './providers/types.ts';
 import { hydrate, toStorable, type TripRepo } from './tripStore.ts';
 import { SupabaseRepo, clientFor } from './supabaseRepo.ts';
 import { z } from 'zod';
 
-const useGoogle = process.env.MAPS_PROVIDER === 'google';
-if (useGoogle && !process.env.GOOGLE_SERVER_API_KEY) throw new Error('MAPS_PROVIDER=google needs GOOGLE_SERVER_API_KEY');
-const provider: MapsProvider = useGoogle
-  ? new GoogleProvider(process.env.GOOGLE_SERVER_API_KEY!, Number(process.env.MAX_GOOGLE_CALLS_PER_DAY ?? 500))
-  : new MockProvider();
+// Default is OpenStreetMap (no API key). MAPS_PROVIDER=mock is for tests; google is optional and server-side only.
+const provider: MapsProvider = createProvider();
 
 const app = express();
 app.use(express.json({ limit: '300kb' }));
 app.use('/api', rateLimit({ windowMs: 60_000, limit: Number(process.env.RATE_LIMIT_PER_MINUTE ?? 20), standardHeaders: true }));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, provider: provider.source, live: provider.source === 'google' }));
+app.get('/api/health', (_req, res) => res.json(healthInfo(provider)));
 
 app.post('/api/trips/generate', async (req, res, next) => {
   const p = tripSchema.safeParse(req.body);
@@ -48,7 +44,7 @@ const auth: express.RequestHandler = async (req, res, next) => {
 const repo = (res: express.Response) => res.locals.repo as TripRepo;
 const idSchema = z.string().uuid();
 const saveSchema = z.object({
-  trip: z.object({ title: z.string().min(1).max(200), source: z.enum(['live', 'mock']), days: z.array(z.any()).max(14),
+  trip: z.object({ title: z.string().min(1).max(200), source: z.enum(['live', 'mock', 'osm']), days: z.array(z.any()).max(14),
     req: z.object({ from: z.string(), to: z.string(), departure: z.string(), avoidTolls: z.boolean() }) }).passthrough(),
 });
 

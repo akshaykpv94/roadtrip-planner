@@ -1,20 +1,21 @@
 import { decode } from './lib/polyline.ts';
-import type { Candidate, MapsProvider } from './providers/types.ts';
+import type { Candidate, MapsProvider, TripSource } from './providers/types.ts';
 
-export interface TripRow { id: string; title: string; source: 'live' | 'mock'; request: TripRequestMeta; itinerary: any; created_at: string; updated_at: string }
+export interface TripRow { id: string; title: string; source: TripSource; request: TripRequestMeta; itinerary: any; created_at: string; updated_at: string }
 export interface TripRequestMeta { from: string; to: string; departure: string; avoidTolls: boolean }
 export interface TripRepo {
   list(): Promise<Pick<TripRow, 'id' | 'title' | 'source' | 'created_at' | 'updated_at'>[]>;
   get(id: string): Promise<TripRow | null>;
-  create(r: { title: string; source: 'live' | 'mock'; request: TripRequestMeta; itinerary: any }): Promise<TripRow>;
+  create(r: { title: string; source: TripSource; request: TripRequestMeta; itinerary: any }): Promise<TripRow>;
   update(id: string, r: { title: string; itinerary: any }): Promise<TripRow | null>;
   remove(id: string): Promise<boolean>;
 }
 
 /**
- * What we persist. Google content other than place IDs (names, addresses, ratings, hours, phones, coordinates, route
- * geometry) is not stored, following my reading of Google's caching rules; it is re-fetched when a trip is opened.
- * Verify against the current Google Maps Platform Terms before launch. Mock trips contain no Google content and are kept whole.
+ * What we persist. Trips from Google data ('live') keep only place IDs and the user's own state: Google content (names,
+ * addresses, ratings, hours, phones, coordinates, route geometry) is not stored, following my reading of Google's caching
+ * rules, and is re-fetched when a trip is opened. Verify against the current Google Maps Platform Terms before relying on it.
+ * Trips from OpenStreetMap ('osm') and mock trips are stored whole: OSM data is open (ODbL) and is shown with attribution.
  */
 export function toStorable(trip: any) {
   const live = trip.source === 'live';
@@ -32,7 +33,13 @@ const downsample = (pts: { lat: number; lng: number }[]) => { const k = Math.max
 /** Rebuild a full trip for the app: place details by ID and the route line are fetched fresh. */
 export async function hydrate(row: TripRow, provider: MapsProvider) {
   const trip: any = { id: row.id, savedId: row.id, title: row.title, source: row.source, req: row.request, ...row.itinerary, warnings: [...(row.itinerary.warnings ?? [])] };
-  if (row.source === 'mock' || provider.source === 'mock') return trip;
+  if (row.source === 'mock' || row.source === 'osm') return trip; // stored whole; nothing to re-fetch
+  if (provider.source !== 'google') { // an older trip saved from Google data, opened while the server is not using Google
+    trip.days = trip.days.map((d: any) => ({ ...d, stops: d.stops.map((s: any) => ({ ...s, name: 'Place details unavailable', lat: 0, lng: 0, unavailable: true })) }));
+    trip.polyline = trip.polyline ?? [];
+    trip.warnings.push('This trip was saved from Google data, which this server is not using. Place names and the route line cannot be shown.');
+    return trip;
+  }
   const ids: string[] = trip.days.flatMap((d: any) => d.stops.map((s: any) => s.id));
   const details: Record<string, Candidate> = provider.details ? await provider.details(ids) : {};
   let missing = 0;

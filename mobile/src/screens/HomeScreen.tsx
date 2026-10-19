@@ -50,6 +50,8 @@ export default function HomeScreen({ navigation }: any) {
                 <Text style={{ fontSize: 17, fontWeight: '600' }}>{s.title}</Text>
                 <Muted>Saved {new Date(s.updated_at).toLocaleDateString('en-IN')}{busyId === s.id ? ' · opening…' : ''}</Muted>
                 {s.source === 'mock' && <Text style={{ color: c.warn, fontSize: 12 }}>Sample data, not live</Text>}
+                {s.source === 'osm' && <Muted>OpenStreetMap data · no live traffic</Muted>}
+                {s.source === 'live' && <Muted>Saved from Google data</Muted>}
               </View>
               <Text onPress={() => remove(s)} accessibilityRole="button" style={{ color: c.warn, padding: 8 }}>Delete</Text>
             </View>

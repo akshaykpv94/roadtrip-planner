@@ -10,7 +10,7 @@ export function calcBudget(b: BudgetIn) {
   const lines: Record<string, Line> = {
     fuel: { amountInr: litres * b.fuelPriceInr, basis: 'estimate', note: 'Uses your fuel price per litre, not a live price.' },
     toll: b.tollInr == null
-      ? { amountInr: 0, basis: 'unknown', note: 'No toll estimate returned for this route.' }
+      ? { amountInr: 0, basis: 'unknown', note: 'Toll prices are unknown for this route and are NOT included in the total.' }
       : { amountInr: b.tollInr, basis: 'google-estimate', note: 'Estimate from the Routes API; actual FASTag charges may differ.' },
     stay: { amountInr: b.nights * b.hotelPerNight, basis: 'estimate', note: 'Your nightly budget; no room rates or availability checked.' },
     food: { amountInr: b.days * b.travellers * b.foodPerPersonDay, basis: 'estimate', note: 'Your per-person daily budget.' },

@@ -12,7 +12,7 @@ export default function BudgetScreen() {
   const b = calcBudget(km, { mileageKmpl: +v.mileage || 1, fuelPriceInr: +v.price || 0, bufferPct: +v.buffer || 0,
     hotelPerNight: +v.hotel || 0, foodPerPersonDay: +v.food || 0, travellers: +v.trav || 1,
     nights: trip.days.length - 1, days: trip.days.length,
-    tollInr: trip.days.reduce((a, d) => a + (d.tollInr ?? 0), 0), otherInr: 0 });
+    tollInr: trip.days.some(d => d.tollInr != null) ? trip.days.reduce((a, d) => a + (d.tollInr ?? 0), 0) : undefined, otherInr: 0 });
   const set = (k: string) => (x: string) => setV(p => ({ ...p, [k]: x }));
   const row = (l: string, n: number) => (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}><Text>{l}</Text><Text>{inr(n)}</Text></View>);
@@ -23,7 +23,10 @@ export default function BudgetScreen() {
         <H>Estimated total {inr(b.total)}</H>
         <Muted>{km} km · {b.litres.toFixed(0)} litres incl. buffer</Muted>
         <View style={{ height: 8 }} />
-        {row('Fuel', b.fuel)}{row('Tolls (estimate)', b.toll)}{row('Stay', b.stay)}{row('Food', b.food)}
+        {row('Fuel', b.fuel)}
+        {b.toll != null ? row('Tolls (estimate)', b.toll)
+          : <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 }}><Text>Tolls</Text><Text>Unknown, not included</Text></View>}
+        {row('Stay', b.stay)}{row('Food', b.food)}
         <View style={{ height: 16 }} />
         <Field label="Mileage (km/l)" value={v.mileage} onChange={set('mileage')} keyboard="numeric" />
         <Field label="Fuel price per litre (₹, your estimate)" value={v.price} onChange={set('price')} keyboard="numeric" />

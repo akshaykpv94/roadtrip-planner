@@ -60,7 +60,7 @@ export default function ItineraryScreen({ navigation }: any) {
           </View>))}
         <Button label={saving ? 'Saving…' : trip.savedId ? 'Save changes' : 'Save trip'} onPress={save} />
         <View style={{ height: 8 }} />
-        <Button kind="ghost" label={busy ? 'Checking traffic…' : 'Refresh traffic and ETA'} onPress={refresh} />
+        <Button kind="ghost" label={busy ? 'Checking…' : trip.trafficAware ? 'Refresh traffic and ETA' : 'Re-check route and ETA (no live traffic)'} onPress={refresh} />
         <View style={{ height: 8 }} />
         <Button label="Open trip map" onPress={() => navigation.navigate('TripMap')} />
         <View style={{ height: 8 }} />

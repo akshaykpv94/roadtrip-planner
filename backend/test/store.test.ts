@@ -46,3 +46,19 @@ test('users cannot read, change or delete each other\'s trips', async () => {
   assert.equal(await b.get(row.id), null); assert.equal(await b.update(row.id, { title: 'x', itinerary: {} }), null);
   assert.equal(await b.remove(row.id), false); assert.equal((await b.list()).length, 0); assert.equal((await a.list()).length, 1);
 });
+
+const osm = { ...live, source: 'osm', warnings: ['OpenStreetMap data'], polyline: [{ lat: 1, lng: 1 }, { lat: 2, lng: 2 }],
+  days: [{ n: 1, stops: [{ id: 'osm-node-9', kind: 'fuel', name: 'Real Pump', lat: 1, lng: 2, mapsUri: 'https://www.openstreetmap.org/node/9', hours: '24/7', eta: '09:00', stayMin: 10, status: 'planned' }] }] };
+test('OpenStreetMap trips are stored whole (open data), and are not mislabelled as Google or mock', async () => {
+  const s = toStorable(osm); assert.equal(s.days[0].stops[0].name, 'Real Pump'); assert.equal(s.days[0].stops[0].hours, '24/7'); assert.equal(s.polyline.length, 2);
+  const row = await new MemoryRepo('u1').create({ title: 't', source: 'osm', request: live.req, itinerary: s });
+  assert.equal(row.source, 'osm');
+  const t = await hydrate(row, new MockProvider());                 // no place re-fetch is needed, whichever provider is running
+  assert.equal(t.source, 'osm'); assert.equal(t.days[0].stops[0].name, 'Real Pump'); assert.equal(t.polyline.length, 2); assert.equal(t.savedId, row.id);
+});
+test('an older Google-saved trip opened without Google shows unavailable places and a warning, never invented details', async () => {
+  const row = await new MemoryRepo('u1').create({ title: 't', source: 'live', request: live.req, itinerary: toStorable(live) });
+  const t = await hydrate(row, new MockProvider());
+  const s = t.days[0].stops[0]; assert.equal(s.unavailable, true); assert.equal(s.name, 'Place details unavailable'); assert.equal(s.status, 'visited'); assert.equal(s.rating, undefined);
+  assert.ok(t.warnings.some((w: string) => w.includes('saved from Google data')));
+});
